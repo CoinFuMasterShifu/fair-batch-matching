@@ -1,4 +1,4 @@
-# Shifu Matching Engine Demo
+# Fair Batch Matching (FBM) Demo
 
 This is my custom matching engine that I wrote for [Warthog Network](https://www.warthog.network/). It matches both, buy and sell orders and also pool liquidity. 
 
@@ -22,7 +22,7 @@ I propose a new matching engine that finds the same price for all buys and all s
 The goal is to implement this matching engine in Warthog Network at some later stage together with hard-coded DeFi capabilities.
 
 ## What does the Repo contain?
-The repository contains a C++ implementation of my *Shifu Matching Engine*. It can be compiled to webassembly using this commands:
+The repository contains a C++ implementation of my *Fair Batch Matching (FBM)* engine. It can be compiled to webassembly using this commands:
 ```
 meson setup build-wasm --cross-file=crosscompile/emscripten.txt
 cd build-wasm
