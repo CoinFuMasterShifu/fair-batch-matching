@@ -1,7 +1,8 @@
 project('fbm-demo', 'cpp',
   version : '0.1',
   default_options : ['warning_level=3',
-    'cpp_std=c++23'])
+    'cpp_std=c++23',
+    'buildtype=release'])
 
 src = files(
   './src/defi/uint64/orderbook.cpp',
@@ -13,9 +14,21 @@ json = subproject('json')
 json_dep = json.get_variable('nlohmann_json_multiple_headers')
 
 if get_option('emscripten')
+  # Map the absolute emsdk include path to a canonical /emsdk prefix so
+  # that __FILE__ strings emitted into the wasm data section don't leak
+  # the user's home directory.
+  em_root = run_command('em-config', 'EMSCRIPTEN_ROOT', check: false).stdout().strip()
+  macro_prefix_map = []
+  if em_root != ''
+    macro_prefix_map = ['-fmacro-prefix-map=' + em_root + '=/emsdk']
+  endif
+
   exe = executable('fbm', ['src/wasm_callbacks.cpp',src],
     dependencies: json_dep,
-    cpp_args:['-fexceptions','-msse', '-msimd128', '-pthread',  '-Wno-limited-postlink-optimizations',  '-fPIC', '-pthread'],
+    cpp_args:['-fexceptions', '-g0',
+              '-msse', '-msimd128', '-pthread',
+              '-Wno-limited-postlink-optimizations', '-fPIC', '-pthread']
+            + macro_prefix_map,
     name_suffix: 'html',
     include_directories: ['src'],
     link_args: ['-sMODULARIZE', '-sEXPORT_ES6',
