@@ -23,23 +23,29 @@ this repo is the runnable artefact.
 
 ## Releases
 
-Pre-built artefacts are attached to each GitHub Release. Trigger a
-release by pushing a tag matching `v*`, or by running the workflow
-manually from the Actions tab.
+Pre-built artefacts are attached to each GitHub Release — see
+[github.com/warthog-network/defi-demo/releases](https://github.com/warthog-network/defi-demo/releases)
+for the list, or jump to the
+[latest](https://github.com/warthog-network/defi-demo/releases/latest).
 
 Three assets per release:
 
-- **`fbm.wasm`** — the wasm binary, ready to embed.
-- **`fbm.js`** — the Embind loader that fetches and instantiates
-  `fbm.wasm` (place both files side by side).
+- **`fbm.wasm` + `fbm.js` — always shipped and used together.**
+  `fbm.js` is the Embind loader (~130 KB) that fetches and
+  instantiates `fbm.wasm` (~220 KB) next to itself. Place both files
+  side by side; renaming either breaks the pairing. See
+  [demo/README.md](demo/README.md#api) for the JS bindings.
 - **`fbm-demo.zip`** — a self-contained demo bundle containing
   `demo.html`, `fbm.js`, `fbm.wasm`, `server.py`, and a usage
   README.
-
   ```sh
   unzip fbm-demo.zip && cd fbm-demo && python3 server.py
   # open http://localhost:8000/demo.html
   ```
+
+Trigger a release by pushing a tag matching `v*` (see
+[Releasing](#releasing)) or by running the workflow manually from
+the Actions tab.
 
 ## Embedding in your own page
 
@@ -59,32 +65,16 @@ files from the same origin.
 
 ## API
 
-All six functions take a plain JS object and return a plain JS
-object (or `{ error: "..." }` on failure).
+The wasm exposes six JS-callable functions:
 
-| Function | Input keys | Output shape | Side effects |
-|---|---|---|---|
-| `addBuy` | `price` (str), `amount` (str, WART) | `{ parseErrors, match: { buys, sells, poolBefore, poolAfter, toPool, filled, matched } }` | inserts a buy order |
-| `addSell` | `price` (str), `amount` (str, TOKEN) | same | inserts a sell order |
-| `editPool` | `token` (str), `wart` (str) | same | updates pool reserves |
-| `deleteOrder` | `base` (bool), `index` (int) | same | removes one order |
-| `setFee` | `E4` (int, 0–9999) | same | updates pool fee |
-| `clearAndSetBaseDecimals` | `baseDecimals` (int, 1–254) | same | resets book + pool |
+- `addBuy` / `addSell` — submit limit orders
+- `editPool` — set pool reserves
+- `deleteOrder` — remove an order
+- `setFee` — change pool fee (in 1/10000 units)
+- `clearAndSetBaseDecimals` — reset the book and change the base token's decimal places
 
-The returned `match` object is omitted when pool reserves fail to
-parse (`{ parseErrors: { poolToken, poolWart } }`).
-
-### Example
-
-```js
-Module.editPool({ token: "100", wart: "200" });
-Module.addSell({ price: "1.5", amount: "10" });
-const res = Module.addBuy({ price: "1.5", amount: "5" });
-console.log(res.match.buys);
-//   [{ amount: "5.00000000", filled: "5.00000000", limit: 1.5 }]
-console.log(res.match.toPool);
-//   null, or { isQuote, base, quote, price }
-```
+Full reference (input keys, output shape, worked example) lives in
+[demo/README.md](demo/README.md#api).
 
 ## Why does the world need this?
 
