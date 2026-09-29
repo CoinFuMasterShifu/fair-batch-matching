@@ -1,9 +1,11 @@
 [wrap-file]
-directory = json-3.2.0
-source_url = https://github.com/nlohmann/json/archive/v3.2.0/json-3.2.0.tar.gz
-source_filename = json-3.2.0.tar.gz
-source_hash = 2de558ff3b3b32eebfb51cf2ceb835a0fa5170e6b8712b02be9c2c07fcfe52a1
-patch_url = https://wrapdb.mesonbuild.com/v2/json_3.2.0-1/get_patch
-patch_filename = json-3.2.0-1-wrap.zip
-patch_hash = f601837156f1f391ea9923c6d602450b1357537b1821d727251e75d97cb10f67
+directory = nlohmann_json-3.12.0
+lead_directory_missing = true
+source_url = https://github.com/nlohmann/json/releases/download/v3.12.0/include.zip
+source_filename = nlohmann_json-3.12.0.zip
+source_hash = b8cb0ef2dd7f57f18933997c9934bb1fa962594f701cd5a8d3c2c80541559372
+source_fallback_url = https://github.com/mesonbuild/wrapdb/releases/download/nlohmann_json_3.12.0-1/nlohmann_json-3.12.0.zip
+wrapdb_version = 3.12.0-1
 
+[provide]
+nlohmann_json = nlohmann_json_dep

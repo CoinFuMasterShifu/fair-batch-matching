@@ -1,5 +1,6 @@
 #pragma once
 #include "types.hpp"
+#include <algorithm>
 #include <vector>
 
 namespace defi {
@@ -62,10 +63,11 @@ struct SortedOrderVector_uint64 {
             v.insert(iter, std::move(o));
         total.add_assert(o.amount);
     }
+    void clear() { *this = {}; }
     auto total_push() const { return total; }
 
 private:
     std::vector<elem_t> v;
-    Funds_uint64 total { 0 };
+    Funds_uint64 total { Funds_uint64::zero() };
 };
 }

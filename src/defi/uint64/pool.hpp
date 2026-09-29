@@ -37,6 +37,7 @@ struct PoolLiquidity_uint64 : public BaseQuote_uint64 {
         return compare_fraction(price_ratio_added_base(baseToPool), p);
     }
 
+    // can be used for degenerated (zero-liquidity) pools
     [[nodiscard]] bool modified_pool_price_exceeds(const Delta_uint64& toPool, Price_uint64 p) const
     {
         if (toPool.isQuote)
@@ -44,67 +45,48 @@ struct PoolLiquidity_uint64 : public BaseQuote_uint64 {
         else
             return rel_base_price(toPool.amount.value(), p) != std::strong_ordering::less;
     }
-};
 
-class Pool_uint64 : public PoolLiquidity_uint64 {
-public:
-    Pool_uint64(uint64_t base, uint64_t quote)
-        : PoolLiquidity_uint64(base, quote)
+    [[nodiscard]] Funds_uint64 sell(Funds_uint64 baseAdd, uint64_t feeE4 = 10)
     {
-        assert(base != 0 && quote != 0);
-    }
-
-    [[nodiscard]] uint64_t sell(uint64_t baseAdd, uint64_t feeE4 = 10)
-    {
-        auto quoteDelta = swapped_amount(base.value(), baseAdd, quote.value(), feeE4);
-        quote.subtract_assert(quoteDelta);
-        base.add_assert(baseAdd);
+        if (baseAdd == 0)
+            return 0;
+        auto quoteDelta = swapped_amount(base.value(), baseAdd.value(), quote.value(), feeE4);
+        quote.subtract_assert(Funds_uint64(quoteDelta));
+        base.add_assert(Funds_uint64(baseAdd));
         return quoteDelta;
     }
 
-    [[nodiscard]] uint64_t buy(uint64_t quoteAdd, uint64_t feeE4 = 10)
+    [[nodiscard]] Funds_uint64 buy(Funds_uint64 quoteAdd, uint64_t feeE4 = 10)
     {
-        auto baseDelta = swapped_amount(quote.value(), quoteAdd, base.value(), feeE4);
-        base.subtract_assert(baseDelta);
+        if (quoteAdd == 0)
+            return 0;
+        auto baseDelta = swapped_amount(quote.value(), quoteAdd.value(), base.value(), feeE4);
+        base.subtract_assert(Funds_uint64::from_value_throw(baseDelta));
         quote.add_assert(quoteAdd);
         return baseDelta;
     }
-
-    [[nodiscard]] uint64_t deposit(Funds_uint64 addBase, Funds_uint64 addQuote)
+    [[nodiscard]] BaseQuote_uint64 apply_match(const FillResult_uint64& m, uint64_t feeE4 = 10)
     {
-        auto s0 { Prod128(base, quote).sqrt() };
-        base.add_assert(addBase);
-        quote.add_assert(addQuote);
-        auto s1 { Prod128(base, quote).sqrt() };
-        assert(s1 >= s0);
-        auto newTokensTotal { tokensTotal == 0 ? s1 : Prod128(tokensTotal, s1).divide_floor(s0) };
-        assert(newTokensTotal.has_value()); // no overflow because tokensTotal <= s0 (fees)
-        assert(*newTokensTotal <= s1);
-        auto result { *newTokensTotal - tokensTotal };
-        tokensTotal = *newTokensTotal;
-        return result;
+        defi::BaseQuote_uint64 returned { m.filled };
+        if (m.toPool) {
+            auto pa { m.toPool->amount() };
+            if (m.toPool->is_quote()) {
+                returned.quote.subtract_assert(pa);
+                auto fromPool { buy(pa, feeE4) };
+                if (!fromPool.is_zero()) {
+                    returned.base.add_assert(fromPool);
+                }
+            } else {
+                returned.base.subtract_assert(pa);
+                auto fromPool { sell(pa, feeE4) };
+                if (!fromPool.is_zero()) {
+                    returned.quote.add_assert(fromPool);
+                }
+            }
+        }
+        return returned;
     }
-
-    [[nodiscard]] BaseQuote_uint64 liquidity_equivalent(uint64_t tokens) const
-    {
-        assert(tokens <= tokensTotal);
-        auto b { Prod128(tokens, base).divide_floor(tokensTotal) };
-        assert(b.has_value());
-        auto q { Prod128(tokens, quote).divide_floor(tokensTotal) };
-        assert(q.has_value());
-        return { *b, *q };
-    }
-
-    void withdraw(BaseQuote_uint64 liquidity, uint64_t tokens)
-    {
-        base.subtract_assert(liquidity.base);
-        quote.subtract_assert(liquidity.quote);
-        assert(tokensTotal >= tokens);
-        tokensTotal -= tokens;
-    }
-
-    auto base_total() const { return base; }
-    auto quote_total() const { return quote; }
+    constexpr static PoolLiquidity_uint64 zero() { return { 0, 0 }; }
 
 private:
     static uint64_t discount(uint64_t value, uint16_t feeE4)
@@ -129,9 +111,80 @@ private:
         uint64_t bDelta { b0 - b1 };
         return discount(bDelta, feeE4);
     }
+};
+
+class Pool_uint64 : public PoolLiquidity_uint64 {
+
+public:
+    Pool_uint64(Funds_uint64 base, Funds_uint64 quote, Funds_uint64 shares)
+        : PoolLiquidity_uint64(base, quote)
+        , sharesTotal(shares.value())
+    {
+    }
+    Pool_uint64()
+        : Pool_uint64(0, 0, 0)
+    {
+    }
+    bool nonzero() const { return *this != Pool_uint64(0, 0, 0); }
+    [[nodiscard]] Funds_uint64 deposit(Funds_uint64 addBase, Funds_uint64 addQuote)
+    {
+        auto s0 { Prod128(base, quote).sqrt() };
+        base.add_assert(addBase);
+        quote.add_assert(addQuote);
+        auto s1 { Prod128(base, quote).sqrt() };
+        assert(s1 >= s0);
+        if (sharesTotal == 0) {
+            sharesTotal = s1;
+            return s1;
+        } else {
+            Nonzero_uint64 nonzero_s0 { s0 }; // nonzero because 0 < sharesTotal <= s0
+            auto newSharesTotal { Prod128(sharesTotal, s1).divide_floor(nonzero_s0) };
+            assert(newSharesTotal.has_value()); // no overflow because sharesTotal <= s0 (fees)
+            assert(*newSharesTotal <= s1);
+            auto result { *newSharesTotal - sharesTotal };
+            sharesTotal = *newSharesTotal;
+            return result;
+        }
+    }
+    auto& liquidity() { return *(static_cast<PoolLiquidity_uint64*>(this)); }
+    auto& liquidity() const { return *(static_cast<const PoolLiquidity_uint64*>(this)); }
+
+    [[nodiscard]] BaseQuote_uint64 liquidity_equivalent(NonzeroFunds_uint64 shares) const
+    {
+        assert(shares.value() <= sharesTotal);
+        Nonzero_uint64 totalShares(sharesTotal); // At this point we know that sharesTotal > 0
+        auto b { Prod128(shares, base).divide_floor(totalShares) };
+        assert(b.has_value());
+        auto q { Prod128(shares, quote).divide_floor(totalShares) };
+        assert(q.has_value());
+        return { *b, *q };
+    }
+    [[nodiscard]] std::optional<BaseQuote_uint64> withdraw_liquity(NonzeroFunds_uint64 shares)
+    {
+        if (sharesTotal < shares.value())
+            return {};
+        auto le { liquidity_equivalent(shares) };
+        sharesTotal -= shares.value();
+        base.subtract_assert(le.base);
+        quote.subtract_assert(le.quote);
+        return le;
+    }
+
+    auto base_total() const { return base; }
+    auto quote_total() const { return quote; }
+    auto shares_total() const { return sharesTotal; }
 
 private:
-    uint64_t tokensTotal { 0 };
+    void withdraw(BaseQuote_uint64 liquidity, uint64_t shares)
+    {
+        assert(sharesTotal >= shares);
+        base.subtract_assert(liquidity.base);
+        quote.subtract_assert(liquidity.quote);
+        sharesTotal -= shares;
+    }
+
+private:
+    uint64_t sharesTotal { 0 };
 };
 
 } // namespace defi

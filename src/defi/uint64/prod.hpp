@@ -1,9 +1,10 @@
 #pragma once
 #include "general/funds.hpp"
+#include "nonzero.hpp"
+
 #include <bit>
 #include <cassert>
 #include <cstdint>
-#include <optional>
 class Prod192;
 inline uint64_t shiftl(uint64_t upper, uint64_t lower, unsigned int i)
 {
@@ -68,11 +69,11 @@ public:
             return 0;
         if (shiftExp >= 0) {
             if (shiftExp >= 64 || upper != 0)
-                return {};
+                return {}; // overflow
             if (shiftExp == 0)
                 return lower;
             if ((lower >> (64 - shiftExp)) != 0)
-                return {};
+                return {}; // overflow
             return lower << shiftExp;
         } else { // (shiftExp < 0)
             bool inexact = false;
@@ -88,12 +89,12 @@ public:
                 return (upper >> shiftExp) + (ceil && inexact);
             } else {
                 if ((upper >> shiftExp) != 0)
-                    return {};
+                    return {}; // overflow
                 if ((lower << (64 - shiftExp)) != 0)
                     inexact = true;
                 auto res { (upper << (64 - shiftExp)) + (lower >> shiftExp) + (ceil && inexact) };
-                if (res == 0) // overflow because of ceiling
-                    return {};
+                if (res == 0)
+                    return {}; // overflow because of ceiling
                 return res;
             }
         }
@@ -134,7 +135,7 @@ public:
         }
     }
     // returns std::nullopt on overflow
-    [[nodiscard]] std::optional<uint64_t> divide_floor(uint64_t v) const
+    [[nodiscard]] std::optional<uint64_t> divide_floor(Nonzero_uint64 v) const
     {
         return div(v, false);
     }
@@ -149,8 +150,9 @@ public:
 private:
     [[nodiscard]] std::optional<uint64_t> div(uint64_t v, bool ceil) const
     {
+        assert(v != 0);
         if (upper == 0)
-            return lower / v + ceil && (lower % v != 0);
+            return (lower / v) + (ceil && (lower % v != 0) ? 1 : 0);
         auto shift { std::countl_zero(upper) };
         uint64_t t0 { (upper << shift) + (lower >> (64 - shift)) };
         uint64_t t1 { lower << shift };

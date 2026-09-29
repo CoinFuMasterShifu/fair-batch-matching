@@ -1,5 +1,5 @@
 #pragma once
-#include "matcher.hpp"
+#include "defi/uint64/pool.hpp"
 #include "sorted_order_vector.hpp"
 
 namespace defi {
@@ -36,6 +36,11 @@ public:
             return true;
         }
         return false;
+    }
+    void clear()
+    {
+        pushQuoteDesc.clear();
+        pushBaseAsc.clear();
     }
     auto& quote_desc_buy() const { return pushQuoteDesc; }
     auto& base_asc_sell() const { return pushBaseAsc; }
