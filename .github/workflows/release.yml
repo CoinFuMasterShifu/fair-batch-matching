@@ -26,6 +26,9 @@ jobs:
         with:
           version: latest
 
+      - name: Install Meson
+        run: python3 -m pip install --break-system-packages meson
+
       - name: Resolve release tag
         id: tag
         run: |
