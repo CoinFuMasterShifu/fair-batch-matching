@@ -1,41 +1,39 @@
-# Fair Batch Matching (FBM) Demo
+# Fair Batch Matching (FBM) Engine
 
 This is my custom matching engine that I wrote for [Warthog Network](https://www.warthog.network/). It matches both, buy and sell orders and also pool liquidity.
 
 ## Purpose
 
-This repo ships the WASM build of the Warthog Fair Batch Matching
-(FBM) engine together with a small reference UI. The matching
-algorithm is described in [the FBM paper](https://warthog.network/FairBatchMatching.pdf);
-this repo is the runnable artefact.
+This repo ships the WASM build of Warthog's Fair Batch Matching (FBM) engine together with a small demo web UI. 
+The matching algorithm is described in [my FBM paper](https://warthog.network/FairBatchMatching.pdf). This repo contains the implementation from [Warthog's core repository](https://github.com/warthog-network/core).
 
 ## What this repo provides
 
 - A C++23 implementation of FBM under `src/`.
-- A WASM build (Embind) exposing six JS-callable functions:
+- A WASM target can be built which exposes six JS-callable functions:
   `addBuy`, `addSell`, `editPool`, `deleteOrder`, `setFee`,
   `clearAndSetBaseDecimals`.
-- A standalone reference UI in `demo/`.
+- A standalone reference UI in `demo/` to demonstrate the use of the WASM build.
 
 ## Live demo
 
-<https://warthog.network/defi-demo>
+See the [demo on warthog.network](https://warthog.network/defi-demo).
 
 ## Releases
 
-Pre-built artefacts are attached to each GitHub Release — see
-[github.com/warthog-network/defi-demo/releases](https://github.com/warthog-network/defi-demo/releases)
+Pre-built artefacts are attached to each GitHub Release, see
+[github.com/warthog-network/fair-batch-matching/releases](https://github.com/warthog-network/fair-batch-matching/releases)
 for the list, or jump to the
-[latest](https://github.com/warthog-network/defi-demo/releases/latest).
+[latest](https://github.com/warthog-network/fair-batch-matching/releases/latest).
 
-Three assets per release:
+There are three assets per release:
 
-- **`fbm.wasm` + `fbm.js` — always shipped and used together.**
+- **`fbm.wasm` + `fbm.js`: always shipped and used together.**
   `fbm.js` is the Embind loader (~130 KB) that fetches and
   instantiates `fbm.wasm` (~220 KB) next to itself. Place both files
   side by side; renaming either breaks the pairing. See
   [demo/README.md](demo/README.md#api) for the JS bindings.
-- **`fbm-demo.zip`** — a self-contained demo bundle containing
+- **`fbm-demo.zip`**: a self-contained demo bundle containing
   `demo.html`, `fbm.js`, `fbm.wasm`, `server.py`, and a usage
   README.
   ```sh
@@ -92,7 +90,7 @@ The most notable incarnation of this practice is the dreaded *Sandwich* which de
 
 The struggle is real. One method to avoid this problem is to be secretive with your order but this does not always work well nor is it practical. Therefore we need to make DeFi great again and fight back. The solution to this problem is simple to formulate but difficult to implement: **We need to get rid of the ordering of transactions within a block. Each transaction shall be treated equally**. Obviously then front and back-running is not possible anymore and so won't be sandwiches.
 
-I propose a new matching engine that finds the same price for all buys and all sells for a market. This price is fairly determined by supply and demand and also by pool liquidity.
+I propose a new matching engine that finds the same price for all buys and all sells for a market. This price is determined in a fair way by supply and demand and also by pool liquidity.
 
 The goal is to implement this matching engine in Warthog Network at some later stage together with hard-coded DeFi capabilities.
 

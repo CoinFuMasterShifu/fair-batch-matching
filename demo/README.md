@@ -2,7 +2,7 @@
 
 A self-contained demo of the Fair Batch Matching (FBM) engine.
 
-Latest version: [github.com/warthog-network/defi-demo/releases/latest](https://github.com/warthog-network/defi-demo/releases/latest)
+Latest version: [github.com/warthog-network/fair-batch-matching/releases/latest](https://github.com/warthog-network/fair-batch-matching/releases/latest)
 
 ## Run
 
