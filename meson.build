@@ -18,8 +18,9 @@ if get_option('emscripten')
     cpp_args:['-fexceptions','-msse', '-msimd128', '-pthread',  '-Wno-limited-postlink-optimizations',  '-fPIC', '-pthread'],
     name_suffix: 'html',
     include_directories: ['src'],
-    link_args: ['-sMODULARIZE', '-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,stringToNewUTF8', '-sEXPORT_ES6',
-      '-sNO_DISABLE_EXCEPTION_CATCHING', 
-      '-sINITIAL_MEMORY=67108864', '-sEXPORT_ALL=1', '-mwasm64'
+    link_args: ['-sMODULARIZE', '-sEXPORT_ES6',
+      '-sNO_DISABLE_EXCEPTION_CATCHING',
+      '-sINITIAL_MEMORY=67108864', '-mwasm64',
+      '-lembind'
       ])
 endif

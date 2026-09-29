@@ -95,48 +95,58 @@
             insertRow(tbodySellers,["total",filled.outBaseSeller, filled.inQuoteSeller, filled.priceSeller]);
         }
         function addSell() {
-            var str = JSON.stringify({
+            editPool();
+            var res = Module.addSell({
                price: document.getElementById("sellPrice").value,
                amount: document.getElementById("tokenAmount").value
             });
-            editPool();
-            var res = JSON.parse(Module.ccall("addSell","string",["string"],[str]))
             console.log(res);
             updateData(res);
         }
         function addBuy() {
-            var str = JSON.stringify({
+            editPool();
+            var res = Module.addBuy({
                price: document.getElementById("buyPrice").value,
                amount: document.getElementById("wartAmount").value
             });
-            editPool();
-            var res = JSON.parse(Module.ccall("addBuy","string",["string"],[str]));
             console.log(res);
             updateData(res);
         }
         function editPool(){
-            var str = JSON.stringify({
+            var res = Module.editPool({
                token: document.getElementById("beforeToken").value,
                wart: document.getElementById("beforeWart").value
             });
-            var res = JSON.parse(Module.ccall("editPool","string",["string"],[str]))
             console.log(res);
             updateData(res);
         }
         function deleteOrder(base, index){
-            var str = JSON.stringify({
+            var res = Module.deleteOrder({
                base: base,
                index: index
             });
-            var res = JSON.parse(Module.ccall("deleteOrder","string",["string"],[str]))
             console.log(res);
             updateData(res);
+        }
+        function applyFee() {
+            var res = Module.setFee({
+                E4: parseInt(document.getElementById("feeE4").value, 10) || 0
+            });
+            updateData(res);
+        }
+        function applyDecimals() {
+            if (!confirm("Change base decimals? This clears the orderbook and pool.")) return;
+            var res = Module.clearAndSetBaseDecimals({
+                baseDecimals: parseInt(document.getElementById("baseDecimals").value, 10) || 0
+            });
+            updateData(res);
+            editPool();
         }
     </script>
 
     <body>
         <div>
-            
+
             <div>
                 <h2>Order Book:</h2>
                 Sell:
@@ -234,6 +244,17 @@
                     <tbody id="tbodySellers">
                     </tbody>
                 </table>
+            </div>
+            <div>
+                <h2>Settings:</h2>
+                <label for="feeE4">Fee (in 0.0001 units, e.g. 5 = 0.05%):</label>
+                <input type="number" id="feeE4" name="feeE4" value="5" min="0" max="9999">
+                <button onclick="applyFee()">Set Fee</button>
+                <br><br>
+                <label for="baseDecimals">Base token decimals (1-254):</label>
+                <input type="number" id="baseDecimals" name="baseDecimals" value="3" min="1" max="254">
+                <button onclick="applyDecimals()">Apply Decimals (clears book)</button>
+                <br><br>
             </div>
         </div>
     </body>

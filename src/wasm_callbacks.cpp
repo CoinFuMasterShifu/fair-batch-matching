@@ -1,70 +1,84 @@
 #include "defi/uint64/orderbook.hpp"
 #include "general/funds.hpp"
-#include "nlohmann/json.hpp"
 #include <emscripten.h>
+#include <emscripten/bind.h>
+#include <emscripten/val.h>
 #include <stdio.h>
 using namespace std;
 
 // global variables
-std::string returnString;
 std::optional<Funds_uint64> poolToken;
 std::optional<Funds_uint64> poolWart;
 defi::Orderbook_uint64 bso;
 uint32_t feeE4 { 5 };
 TokenDecimals baseDecimals { 3 };
 
-using json = nlohmann::json;
-json pool_json(const defi::PoolLiquidity_uint64& pool)
+using emval = emscripten::val;
+
+static emval pool_val(const defi::PoolLiquidity_uint64& pool)
 {
     auto baseTotal { pool.base.to_decimal(baseDecimals) };
     auto quoteTotal { pool.quote.as_wart() };
-    // double base
-    return { { "base", baseTotal.to_string() },
-        { "quote", quoteTotal.to_string() },
-        { "price",
-            quoteTotal.to_double() / baseTotal.to_double() } };
+    emval obj = emval::object();
+    obj.set("base", emval(baseTotal.to_string()));
+    obj.set("quote", emval(quoteTotal.to_string()));
+    obj.set("price", emval(quoteTotal.to_double() / baseTotal.to_double()));
+    return obj;
 }
 
-json match_result()
+static emval make_error(const char* msg)
 {
-    json errors {
-        { "poolToken", !poolToken.has_value() },
-        { "poolWart", !poolWart.has_value() },
-    };
-    if (!poolToken || !poolWart)
-        return { { "parseErrors", errors } };
+    emval obj = emval::object();
+    obj.set("error", emval(std::string(msg)));
+    return obj;
+}
+
+emval match_result()
+{
+    emval errors = emval::object();
+    errors.set("poolToken", emval(!poolToken.has_value()));
+    errors.set("poolWart", emval(!poolWart.has_value()));
+    if (!poolToken || !poolWart) {
+        emval out = emval::object();
+        out.set("parseErrors", errors);
+        return out;
+    }
 
     const defi::PoolLiquidity_uint64 p { *poolToken, *poolWart };
     auto pTmp { p };
     auto match_res { bso.match(p) };
-    json buys(json::array());
+    emval buys = emval::array();
 
     auto fquote { match_res.filled.quote };
     for (size_t i = 0; i < bso.quote_desc_buy().size(); ++i) {
         auto order { bso.quote_desc_buy()[i] };
         auto filled { std::min(order.amount, fquote) };
         fquote.subtract_assert(filled);
-        buys.push_back({ { "amount", order.amount.as_wart().to_string() },
-            { "filled", filled.as_wart().to_string() },
-            { "limit", order.limit.to_double_adjusted(baseDecimals) } });
+        emval row = emval::object();
+        row.set("amount", emval(order.amount.as_wart().to_string()));
+        row.set("filled", emval(filled.as_wart().to_string()));
+        row.set("limit", emval(order.limit.to_double_adjusted(baseDecimals)));
+        buys.call<void>("push", row);
     }
 
-    json sells(json::array());
+    emval sells = emval::array();
     auto J { bso.base_asc_sell().size() };
     auto fbase { match_res.filled.base };
     for (size_t j = 0; j < J; ++j) {
         auto order { bso.base_asc_sell()[j] };
         auto filled { std::min(fbase, order.amount) };
         fbase.subtract_assert(filled);
-        sells.push_back({ { "amount", order.amount.to_decimal(baseDecimals).to_string() },
-            { "filled", filled.to_decimal(baseDecimals).to_string() },
-            { "limit", order.limit.to_double_adjusted(baseDecimals) } });
+        emval row = emval::object();
+        row.set("amount", emval(order.amount.to_decimal(baseDecimals).to_string()));
+        row.set("filled", emval(filled.to_decimal(baseDecimals).to_string()));
+        row.set("limit", emval(order.limit.to_double_adjusted(baseDecimals)));
+        sells.call<void>("push", row);
     }
-    std::reverse(sells.begin(), sells.end());
+    sells.call<void>("reverse");
 
-    auto json_price { [](const defi::BaseQuote_uint64& bq) -> json {
-        return json(bq.price_double(baseDecimals, TokenDecimals::WART.value()));
-    } };
+    auto price_val = [](const defi::BaseQuote_uint64& bq) -> emval {
+        return emval(bq.price_double(baseDecimals, TokenDecimals::WART.value()));
+    };
 
     const auto& toPool { match_res.toPool };
     auto poolBaseQuote { [&]() -> defi::BaseQuote_uint64 {
@@ -93,14 +107,16 @@ json match_result()
         }
     }
 
-    auto toPoolJson = [&]() -> json {
+    auto toPoolVal = [&]() -> emval {
         if (toPool) {
-            return { { "isQuote", toPool->is_quote() },
-                { "base", poolBaseQuote.base.to_decimal(baseDecimals).to_string() },
-                { "quote", poolBaseQuote.quote.as_wart().to_string() },
-                { "price", json_price(poolBaseQuote) } };
-        };
-        return nullptr;
+            emval obj = emval::object();
+            obj.set("isQuote", emval(toPool->is_quote()));
+            obj.set("base", emval(poolBaseQuote.base.to_decimal(baseDecimals).to_string()));
+            obj.set("quote", emval(poolBaseQuote.quote.as_wart().to_string()));
+            obj.set("price", price_val(poolBaseQuote));
+            return obj;
+        }
+        return emval::null();
     };
 
     auto filledBuyer { matched };
@@ -113,84 +129,89 @@ json match_result()
         }
     }
 
-    return json { { "parseErrors", errors },
-        { "match",
-            { { "buys", buys },
-                { "sells", sells },
-                { "poolBefore", pool_json(p) },
-                { "toPool", toPoolJson() },
-                { "filled",
-                    {
-                        { "outBaseSeller", filledSeller.base.to_decimal(baseDecimals).to_string() },
-                        { "inQuoteSeller", filledSeller.quote.as_wart().to_string() },
-                        { "priceSeller", json_price(filledSeller) },
-                        { "outQuoteBuyer", filledBuyer.quote.as_wart().to_string() },
-                        { "inBaseBuyer", filledBuyer.base.to_decimal(baseDecimals).to_string() },
-                        { "priceBuyer", json_price(filledBuyer) },
-                    } },
-                { "matched",
-                    { { "base", matched.base.to_decimal(baseDecimals).to_string() },
-                        { "quote", matched.quote.as_wart().to_string() },
-                        { "price", matched.quote.is_zero() ? json(nullptr) : json_price(matched) } } },
-                { "poolAfter", pool_json(pTmp) } } } };
+    emval filledObj = emval::object();
+    filledObj.set("outBaseSeller", emval(filledSeller.base.to_decimal(baseDecimals).to_string()));
+    filledObj.set("inQuoteSeller", emval(filledSeller.quote.as_wart().to_string()));
+    filledObj.set("priceSeller", price_val(filledSeller));
+    filledObj.set("outQuoteBuyer", emval(filledBuyer.quote.as_wart().to_string()));
+    filledObj.set("inBaseBuyer", emval(filledBuyer.base.to_decimal(baseDecimals).to_string()));
+    filledObj.set("priceBuyer", price_val(filledBuyer));
+
+    emval matchedObj = emval::object();
+    matchedObj.set("base", emval(matched.base.to_decimal(baseDecimals).to_string()));
+    matchedObj.set("quote", emval(matched.quote.as_wart().to_string()));
+    matchedObj.set("price", matched.quote.is_zero() ? emval::null() : price_val(matched));
+
+    emval matchObj = emval::object();
+    matchObj.set("buys", buys);
+    matchObj.set("sells", sells);
+    matchObj.set("poolBefore", pool_val(p));
+    matchObj.set("toPool", toPoolVal());
+    matchObj.set("filled", filledObj);
+    matchObj.set("matched", matchedObj);
+    matchObj.set("poolAfter", pool_val(pTmp));
+
+    emval out = emval::object();
+    out.set("parseErrors", errors);
+    out.set("match", matchObj);
+    return out;
 }
 
-template <typename callable>
-requires std::is_invocable_r_v<json, callable, json>
-const char* wrap_fun(const callable& fun, const char* c)
+static std::string get_string_or_empty(emval v, const char* key)
 {
-    returnString = [&]() {
-        try {
-            return fun(json::parse(std::string_view(c))).dump();
-        } catch (std::runtime_error& e) {
-            return json { { "error", e.what() } }.dump();
-        }
-    }();
-    return returnString.c_str();
+    emval field { v[key] };
+    if (field.isUndefined() || field.isNull())
+        return std::string();
+    return field.as<std::string>();
 }
 
-defi::Order_uint64 parse_order(json j, TokenDecimals decimals)
+defi::Order_uint64 parse_order(emval v, TokenDecimals decimals)
 {
-    auto price { [&]() {
+    if (v["price"].isUndefined())
+        throw std::runtime_error("Missing 'price' field");
+    if (v["amount"].isUndefined())
+        throw std::runtime_error("Missing 'amount' field");
+    Funds_uint64 amount { [&]() {
         try {
-            return Price_uint64::from_string(j["price"].get<std::string>()).value();
-        } catch (...) {
-            throw std::runtime_error("Cannot get price");
-        }
-    }() };
-    auto amount { [&]() {
-        try {
-            std::string s { j["amount"].get<std::string>() };
+            std::string s { v["amount"].as<std::string>() };
             if (auto o { Funds_uint64::parse(s, decimals) })
                 return *o;
-
         } catch (...) {
         }
         throw std::runtime_error("Cannot parse amount");
     }() };
+    Price_uint64 price { [&]() {
+        try {
+            return Price_uint64::from_string(v["price"].as<std::string>()).value();
+        } catch (...) {
+            throw std::runtime_error("Cannot get price");
+        }
+    }() };
     return { amount, price };
 }
 
-json edit_pool(json j)
+emval edit_pool(emval v)
 {
     try {
-        poolToken = Funds_uint64::parse(j["token"].get<std::string>(), baseDecimals);
+        poolToken = Funds_uint64::parse(get_string_or_empty(v, "token"), baseDecimals);
     } catch (...) {
         poolToken.reset();
     }
     try {
-        poolWart = Wart::try_parse(j["wart"].get<std::string>()).value_or_null();
+        poolWart = Wart::try_parse(get_string_or_empty(v, "wart")).value_or_null();
     } catch (...) {
         poolWart.reset();
     }
     return match_result();
 }
 
-json delete_order(json j)
+emval delete_order(emval v)
 {
+    if (v["base"].isUndefined() || v["index"].isUndefined())
+        return match_result();
     try {
-        bool base = j["base"].get<bool>();
-        auto i = j["index"].get<size_t>();
+        bool base = v["base"].as<bool>();
+        auto i = v["index"].as<size_t>();
         if (base)
             bso.delete_base(i);
         else
@@ -200,76 +221,80 @@ json delete_order(json j)
     return match_result();
 }
 
-json add_buy(json j)
-{
-    auto order { parse_order(j, TokenDecimals::WART) };
-    bso.insert_quote(order);
-    return match_result();
-}
-
-json add_sell(json j)
-{
-    auto order { parse_order(j, baseDecimals) };
-    bso.insert_base(order);
-    return match_result();
-}
-
-json set_fee(json j)
+emval add_buy(emval v)
 {
     try {
-        auto e4 { j["E4"].get<int>() };
+        auto order { parse_order(v, TokenDecimals::WART) };
+        bso.insert_quote(order);
+    } catch (std::runtime_error& e) {
+        return make_error(e.what());
+    } catch (...) {
+        return make_error("Failed to add buy order.");
+    }
+    return match_result();
+}
+
+emval add_sell(emval v)
+{
+    try {
+        auto order { parse_order(v, baseDecimals) };
+        bso.insert_base(order);
+    } catch (std::runtime_error& e) {
+        return make_error(e.what());
+    } catch (...) {
+        return make_error("Failed to add sell order.");
+    }
+    return match_result();
+}
+
+emval set_fee(emval v)
+{
+    if (v["E4"].isUndefined())
+        return make_error("Can't extract integer at 'E4' key.");
+    try {
+        int e4 { v["E4"].as<int>() };
         if (e4 >= 10000) {
             throw std::runtime_error("Fee value must be denoted as multiple of 0.0001 i.e. as integer in 0...9999.");
         }
         feeE4 = e4;
+    } catch (std::runtime_error& e) {
+        return make_error(e.what());
     } catch (...) {
-        throw std::runtime_error("Can't extract integer at \'E4\' key.");
+        return make_error("Can't extract integer at 'E4' key.");
     }
     return match_result();
 }
 
-json clear_and_set_base_decimals(json j)
+emval clear_and_set_base_decimals(emval v)
 {
-    auto iter { j.find("baseDecimals") };
-    if (iter != j.end()) {
+    bool updated { true };
+    if (v.hasOwnProperty("baseDecimals") && !v["baseDecimals"].isUndefined()) {
+        updated = false;
         try {
-            auto d { iter->get<int>() };
-            if (d > 0 && d < 255) { // can convert to uint8_t
-                if (true) {
-                    Result<TokenDecimals> td { TokenDecimals::from_number(d) };
-                    if (td.has_value()) {
-                        baseDecimals = td.value();
-                        goto extracted;
-                    }
+            int d { v["baseDecimals"].as<int>() };
+            if (d > 0 && d < 255) {
+                Result<TokenDecimals> td { TokenDecimals::from_number(d) };
+                if (td.has_value()) {
+                    baseDecimals = td.value();
+                    updated = true;
                 }
             }
         } catch (...) {
         };
-        throw std::runtime_error("Cannot extract decimals at key 'baseDecimals'");
+        if (!updated)
+            return make_error("Cannot extract decimals at key 'baseDecimals'");
     }
-extracted:
     poolToken.reset();
     poolWart.reset();
     bso.clear();
     return match_result();
 }
 
-extern "C" {
-EMSCRIPTEN_KEEPALIVE
-const char* addBuy(const char* json) { return wrap_fun(add_buy, json); }
-
-EMSCRIPTEN_KEEPALIVE
-const char* addSell(const char* json) { return wrap_fun(add_sell, json); }
-
-EMSCRIPTEN_KEEPALIVE
-const char* editPool(const char* json) { return wrap_fun(edit_pool, json); }
-
-EMSCRIPTEN_KEEPALIVE
-const char* deleteOrder(const char* json) { return wrap_fun(delete_order, json); }
-
-EMSCRIPTEN_KEEPALIVE
-const char* setFee(const char* json) { return wrap_fun(set_fee, json); }
-
-EMSCRIPTEN_KEEPALIVE
-const char* clearAndSetBaseDecimals(const char* json) { return wrap_fun(clear_and_set_base_decimals, json); }
+EMSCRIPTEN_BINDINGS(demo) {
+    emscripten::function("addBuy", &add_buy);
+    emscripten::function("addSell", &add_sell);
+    emscripten::function("editPool", &edit_pool);
+    emscripten::function("deleteOrder", &delete_order);
+    emscripten::function("setFee", &set_fee);
+    emscripten::function("clearAndSetBaseDecimals", &clear_and_set_base_decimals);
 }
