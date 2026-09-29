@@ -87,7 +87,7 @@ The most notable incarnation of this practice is the dreaded *Sandwich* which de
 
 **Basically the sandwich is doing this to your order:**
 <p align="center">
-  <img src="https://external-content.duckduckgo.com/iu/?u=https%3A%2F%ae01.alicdn.com%2Fkf%2FHTB1D5POX5LxK1Rjy0Ffq6zYdVXa6%2F8-styles-Funny-Cartoon-Animal-Small-Squeeze-Antistress-Toy-Pop-Out-Eyes-Doll-Stress-Relief-Venting.jpg&f=1&nofb=1&ipt=62da1656015b17c22ce5dd0db0bb7430c50a524a5819e74d296cfcd33c6bb509&ipo=images" alt="Sublime's custom image", width= "40%";/>
+  <img src="https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fae01.alicdn.com%2Fkf%2FHTB1D5POX5LxK1Rjy0Ffq6zYdVXa6%2F8-styles-Funny-Cartoon-Animal-Small-Squeeze-Antistress-Toy-Pop-Out-Eyes-Doll-Stress-Relief-Venting.jpg&f=1&nofb=1&ipt=62da1656015b17c22ce5dd0db0bb7430c50a524a5819e74d296cfcd33c6bb509&ipo=images" alt="Sublime's custom image", width= "40%";/>
 </p>
 
 The struggle is real. One method to avoid this problem is to be secretive with your order but this does not always work well nor is it practical. Therefore we need to make DeFi great again and fight back. The solution to this problem is simple to formulate but difficult to implement: **We need to get rid of the ordering of transactions within a block. Each transaction shall be treated equally**. Obviously then front and back-running is not possible anymore and so won't be sandwiches.
